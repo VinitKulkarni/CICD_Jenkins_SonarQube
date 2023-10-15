@@ -1,0 +1,49 @@
+pipeline{
+    agent any
+    stages{
+        stage("git"){
+            steps{
+                git 'https://github.com/VinitKulkarni/new_chatapp.git'
+                echo "git pull completed"
+            }
+        }
+        stage ("SonarQube Analysis") {
+            steps {
+                script {
+                    def scannerHome = tool 'SonarQube';
+                    withSonarQubeEnv('SonarQube_Server') {
+                        sh """
+                        ${scannerHome}/bin/sonar-scanner \
+                        -Dsonar.projectKey=sonarqube-projectkey \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url='http://15.206.81.96:9000' \
+                        -Dsonar.login='432743c2d1e59a124bf6ce0368cba1e2f1bfbcbe'
+                        """
+                    }
+                }
+            }
+        }
+        stage ("Quality Gate"){
+            steps {
+                waitForQualityGate abortPipeline: true
+            }
+        }
+        stage('build') {
+            steps {
+                sshagent(['awskey']) {
+                    sh "scp -r -o StrictHostKeyChecking=no /var/lib/jenkins/workspace/ChatApp_Job/fundoo ubuntu@10.0.1.241:/etc/ubuntu/new_chatapp/"
+                    echo "build completed"
+                }
+            }
+        }
+        stage('deploy') {
+            steps {
+                sshagent(['awskey']) {
+                    //sh "ssh -o StrictHostKeyChecking=no -i temp_key.pem ec2-user@${EC2_INSTANCE_IP} 'your_command_here'"
+                    sh "ssh -o StrictHostKeyChecking=no ubuntu@10.0.1.241 'bash /etc/ubuntu/new_chatapp/scripts/start_server.sh'"
+                    echo "deploy stage success"
+                }
+               }
+            }
+    }
+}
